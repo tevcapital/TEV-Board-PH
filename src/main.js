@@ -8,10 +8,10 @@ const { getScaffold } = require('./shared/scaffolds');
 const { FEEDS } = require('./shared/feeds');
 
 const store = new Store({
-  name: 'tev-agents',
+  name: 'tev-board-ph',
   defaults: {
     settings: {
-      mode: 'openllms',
+      mode: 'frontier',
       groqApiKey: '',
       groqModel: 'llama-3.3-70b-versatile',
       groqCustomModel: '',
@@ -65,10 +65,10 @@ const MASTER_RESPONSE_SCAFFOLD = `GLOBAL RESPONSE RULES:
 - Lead with the conclusion.
 - Do not use sections, tables, headers, or bullet lists unless the user explicitly asks.
 - Only give a long answer if the user explicitly asks for details, expand, why, or full brief.
-- Stay within the desk's scope: AI, technology, computing, semiconductors, software platforms, startups, venture capital, open source, developer tools, and the future of intelligence. If a topic like geopolitics, regulation, energy policy, or trade policy is raised in the context of its impact on technology or AI, engage with it — do not refuse it as out of scope.
-- If the user asks a consumer product, lifestyle, personal preference, or general advice question that is not really a technology, computing, or intelligence question, say briefly that it is outside this desk's scope.
+- Stay within the desk's scope: Philippine business, infrastructure, banking, utilities, industrials, public markets, macroeconomics, regulation, trade, and national development. If a topic like geopolitics, energy policy, or trade policy is raised in the context of its impact on Philippine business or capital allocation, engage with it — do not refuse it as out of scope.
+- If the user asks a consumer product, lifestyle, personal preference, or general advice question that is not really a Philippine business, infrastructure, capital markets, or macro question, say briefly that it is outside this desk's scope.
 - Do not cite specific metrics, statistics, data points, or technical measurements that are not present in your live data context, uploaded documents, or search results. If you reference data to support your argument, stay directional and qualitative rather than inventing specific numbers. Only cite a number if it appears in the data provided to you in this prompt.
-- Do not include transcript speaker labels such as "[CHIEF]:", "[GERSTNER]:", or "[DEPUTY]:" in the visible answer.`;
+- Do not include transcript speaker labels such as "[CHIEF]:", "[MVP]:", or "[TENSION]:" in the visible answer.`;
 
 function formatInTimeZone(date, timeZone, options = {}) {
   return new Intl.DateTimeFormat('en-US', { timeZone, ...options }).format(date);
@@ -198,14 +198,6 @@ function buildNoModelStateNote(agentId = '') {
   ].join('\n');
 }
 
-function stripTranscriptPrefix(text = '') {
-  return String(text).replace(/^\s*(?:\[[A-Z0-9_-]+\]:\s*)+/i, '');
-}
-
-function sanitizeVisibleAssistantText(text = '') {
-  return stripTranscriptPrefix(String(text));
-}
-
 function getAgentState(agentId) {
   return store.get(`agents.${agentId}`, { documents: [], messages: [] });
 }
@@ -308,7 +300,7 @@ function buildSystemPrompt(agent, documents = [], docTotalCharBudget = NORMAL_DO
   const modelNote = model ? `\n\nYou are running as ${model} ${viaMap[mode] || ''}.` : '';
   const timeNote = buildCurrentTimeNote();
   const warRoomNote = isWarRoom
-    ? `\n\nYou are in a multi-analyst War Room. Other analysts participate in this conversation - their messages are prefixed with their agent ID (e.g. [GERSTNER]: ...). Read the full conversation, acknowledge relevant points from other analysts where appropriate, and respond strictly from your own coverage perspective.`
+    ? `\n\nYou are in a multi-analyst War Room. Other analysts participate in this conversation - their messages are prefixed with their agent ID (e.g. [MVP]: ...). Read the full conversation, acknowledge relevant points from other analysts where appropriate, and respond strictly from your own coverage perspective.`
     : '';
   const warRoomIdentityNote = isWarRoom
     ? `\n\nIdentity rules for this turn: You are replying as ${agent.id}. Do not adopt another analyst's identity from the transcript. If the transcript refers to ${agent.id} in third person, interpret that as a reference to you rather than a cue to speak about yourself in third person.`
@@ -431,7 +423,7 @@ function createHubWindow() {
     height: 760,
     minWidth: 360,
     minHeight: 620,
-    title: 'TEV Agents',
+    title: 'TEV Board PH',
     backgroundColor: '#f4f7fb',
     titleBarStyle: 'hiddenInset'
   });
@@ -451,7 +443,7 @@ function createSettingsWindow() {
     height: 760,
     minWidth: 600,
     minHeight: 680,
-    title: 'TEV Agents - Settings',
+    title: 'TEV Board PH - Settings',
     backgroundColor: '#f4f7fb',
     titleBarStyle: 'hiddenInset'
   });
@@ -468,7 +460,7 @@ function createWarRoomWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    title: 'TEV Agents - War Room',
+    title: 'TEV Board PH - War Room',
     backgroundColor: '#f4f7fb',
     titleBarStyle: 'hiddenInset'
   });
@@ -492,7 +484,7 @@ function createAgentWindow(agentId) {
     height: 860,
     minWidth: 900,
     minHeight: 660,
-    title: `TEV Agents - ${agent.name}`,
+    title: `TEV Board PH - ${agent.name}`,
     backgroundColor: '#f4f7fb',
     titleBarStyle: 'hiddenInset'
   });
@@ -617,7 +609,7 @@ function getProviderConfig(settings) {
       endpoint: OPENROUTER_URL,
       apiKey: settings.openrouterApiKey,
       model: resolveConfiguredModel('openrouterModel', 'openrouterCustomModel', 'qwen/qwen3-4b:free'),
-      extraHeaders: { 'HTTP-Referer': 'https://tevagents.local', 'X-Title': 'TEV Agents' }
+      extraHeaders: { 'HTTP-Referer': 'https://tevboardph.local', 'X-Title': 'TEV Board PH' }
     };
   }
   if (mode === 'anthropic') {
@@ -654,46 +646,13 @@ function getMessageTextContent(message = {}) {
     .trim();
 }
 
-function getMessageImages(message = {}) {
-  if (Array.isArray(message.images)) return message.images.filter(Boolean);
-  if (!Array.isArray(message.content)) return [];
-  return message.content
-    .filter((part) => part && typeof part === 'object' && (part.type === 'image' || part.type === 'input_image' || part.type === 'image_url'))
-    .map((part) => part.data || part.base64 || part.image || part.imageBase64 || part.image_url?.url || part.url)
-    .filter(Boolean);
-}
-
-function normalizeImageData(image) {
-  const raw = String(image || '').trim();
-  if (!raw) return null;
-  if (raw.startsWith('data:')) {
-    const match = raw.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) return null;
-    return { mediaType: match[1], data: match[2] };
-  }
-  return { mediaType: 'image/jpeg', data: raw };
-}
-
 function buildAnthropicMessages(messages = []) {
   return messages
     .filter((message) => message && message.role !== 'system')
     .map((message) => {
       const role = message.role === 'assistant' ? 'assistant' : 'user';
       const text = getMessageTextContent(message);
-      const images = getMessageImages(message)
-        .map(normalizeImageData)
-        .filter(Boolean)
-        .map((image) => ({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: image.mediaType,
-            data: image.data
-          }
-        }));
-
-      if (!images.length) return { role, content: text };
-      return { role, content: [...images, { type: 'text', text }] };
+      return { role, content: text };
     });
 }
 
@@ -705,18 +664,7 @@ function buildOpenAIMessages(systemPrompt = '', messages = []) {
     if (!message || message.role === 'system') continue;
     const role = message.role === 'assistant' ? 'assistant' : 'user';
     const text = getMessageTextContent(message);
-    const images = getMessageImages(message)
-      .map(normalizeImageData)
-      .filter(Boolean)
-      .map((image) => ({
-        type: 'image_url',
-        image_url: { url: `data:${image.mediaType};base64,${image.data}` }
-      }));
-
-    formatted.push({
-      role,
-      content: images.length ? [{ type: 'text', text }, ...images] : text
-    });
+    formatted.push({ role, content: text });
   }
 
   return formatted;
@@ -1357,7 +1305,7 @@ ipcMain.handle('agent:send-message', async (_, { agentId, messages = [], newsIte
       responseText = await completeChat([{ role: 'system', content: primary.systemPrompt }, ...primary.chatMessages], primary.settings);
     }
 
-    return { text: sanitizeVisibleAssistantText(responseText) };
+    return { text: responseText };
   } catch (error) {
     return { error: error.message };
   }
@@ -1450,31 +1398,31 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
           body: JSON.stringify({ model: provider.model, stream: true, messages: payload.messages })
         });
         const result = await pipeOllamaStream(response.body, sender, { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' }, { agentId });
-        researchOutputs.push({ agentId, text: sanitizeVisibleAssistantText(result.text || '') });
+        researchOutputs.push({ agentId, text: result.text || '' });
       } else if (provider.mode === 'anthropic') {
         const result = await callAnthropic(systemPrompt, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
         });
-        researchOutputs.push({ agentId, text: sanitizeVisibleAssistantText(result.text || '') });
+        researchOutputs.push({ agentId, text: result.text || '' });
       } else if (provider.mode === 'openai') {
         const result = await callOpenAI(systemPrompt, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
         });
-        researchOutputs.push({ agentId, text: sanitizeVisibleAssistantText(result.text || '') });
+        researchOutputs.push({ agentId, text: result.text || '' });
       } else {
         const result = await pipeGroqStreamTagged(payload, provider.apiKey, settings.tavilyApiKey, sender, provider.endpoint, { agentId }, provider.extraHeaders);
-        researchOutputs.push({ agentId, text: sanitizeVisibleAssistantText(result.text || '') });
+        researchOutputs.push({ agentId, text: result.text || '' });
       }
     }
 
     if (!sender.isDestroyed()) sender.send('askall:research-done', { researchOutputs });
 
     const synthesisPrompt = researchOutputs.map((item) => `[${item.agentId}]: ${item.text}`).join('\n\n');
-    for (const agentId of ['CHIEF', 'DEPUTY']) {
+    for (const agentId of ['CHIEF', 'TENSION']) {
       const agent = getAgentWithState(agentId);
       const systemPrompt = buildSystemPrompt(
         agent,

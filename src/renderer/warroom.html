@@ -247,17 +247,13 @@
 
     <script>
       const AGENT_COLORS = {
-        GERSTNER: '#0f766e',
-        SAYLOR: '#2563eb',
-        DRUCK: '#7c3aed',
-        MUSK: '#db2777',
-        HUANG: '#ea580c',
-        PATEL: '#16a34a',
-        KARPATHY: '#0891b2',
-        MARKS: '#ca8a04',
-        RUBIN: '#6d28d9',
+        MVP: '#0f766e',
+        RSA: '#2563eb',
+        JAZA: '#7c3aed',
+        EKR: '#db2777',
+        NVT: '#ea580c',
         CHIEF: '#1e3a5f',
-        DEPUTY: '#991b1b'
+        TENSION: '#991b1b'
       };
 
       const chat = document.getElementById('chat');
@@ -282,7 +278,7 @@
         document.querySelectorAll('.agent-btn').forEach((btn) => btn.classList.toggle('active', btn.dataset.id === agentId));
       }
 
-      function sanitizeAssistantText(text) {
+      function sanitizeTensionText(text) {
         return String(text).replace(/^\s*\[(?:[A-Z0-9_-]+)\]:\s*/i, '');
       }
 
@@ -415,9 +411,8 @@
         });
         window.desk.onStreamDone(async () => {
           bubble.classList.remove('streaming');
-          const clean = sanitizeAssistantText(fullText);
-          bubble.textContent = clean;
-          messages.push({ role: 'assistant', agentId: activeAgentId, content: clean, timestamp: Date.now() });
+          bubble.textContent = fullText;
+          messages.push({ role: 'assistant', agentId: activeAgentId, content: fullText, timestamp: Date.now() });
           messages = trimMessages(messages);
           await window.desk.saveWarRoomMessages(messages);
           sending = false;
@@ -453,9 +448,10 @@
         window.desk.onAskAllAgentDone(async ({ agentId, text }) => {
           if (!bubbles.has(agentId)) bubbles.set(agentId, appendAgentBubble(agentId));
           const bubble = bubbles.get(agentId);
+          const finalText = agentId === 'TENSION' ? sanitizeTensionText(text) : text;
           bubble.classList.remove('streaming');
-          bubble.textContent = sanitizeAssistantText(text);
-          messages.push({ role: 'assistant', agentId, content: sanitizeAssistantText(text), timestamp: Date.now() });
+          bubble.textContent = finalText;
+          messages.push({ role: 'assistant', agentId, content: finalText, timestamp: Date.now() });
           messages = trimMessages(messages);
           await window.desk.saveWarRoomMessages(messages);
         });

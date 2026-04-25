@@ -216,10 +216,6 @@
       let newsItems = [];
       let sending = false;
 
-      function sanitizeAssistantText(text) {
-        return String(text).replace(/^\s*(?:\[[A-Z0-9_-]+\]:\s*)+/i, '');
-      }
-
       function appendMessage(role, content, streaming = false) {
         const bubble = document.createElement('div');
         bubble.className = `msg ${role}` + (streaming ? ' streaming' : '');
@@ -364,8 +360,8 @@
         });
         window.desk.onStreamDone(async () => {
           bubble.classList.remove('streaming');
-          bubble.textContent = sanitizeAssistantText(fullText);
-          messages.push({ role: 'assistant', content: sanitizeAssistantText(fullText) });
+          bubble.textContent = fullText;
+          messages.push({ role: 'assistant', content: fullText });
           await window.desk.saveMessages(agentId, messages);
           sending = false;
           sendBtn.disabled = false;

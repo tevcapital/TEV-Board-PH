@@ -1,9 +1,13 @@
 {
-  "name": "tev-agents",
-  "productName": "TEV Agents",
-  "version": "0.1.0",
-  "description": "AI/tech leaders investment committee research workstation",
+  "name": "tev-board-ph",
+  "productName": "TEV Board PH",
+  "version": "1.0.0",
+  "description": "Philippine business advisory committee workstation",
   "main": "src/main.js",
+  "build": {
+    "appId": "com.tevcapital.tev-board-ph",
+    "productName": "TEV Board PH"
+  },
   "dependencies": {
     "electron-store": "^10.0.1",
     "mammoth": "^1.10.0",

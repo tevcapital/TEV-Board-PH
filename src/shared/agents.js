@@ -1,15 +1,11 @@
 const AGENTS = [
-  { id: 'GERSTNER', name: 'Brad Gerstner', type: 'research', company: 'Altimeter Capital' },
-  { id: 'SAYLOR', name: 'Michael Saylor', type: 'research', company: 'Strategy (MSTR)' },
-  { id: 'DRUCK', name: 'Stanley Druckenmiller', type: 'research', company: 'Duquesne Family Office' },
-  { id: 'MUSK', name: 'Elon Musk', type: 'research', company: 'Tesla / SpaceX / xAI' },
-  { id: 'HUANG', name: 'Jensen Huang', type: 'research', company: 'NVIDIA' },
-  { id: 'PATEL', name: 'Dylan Patel', type: 'research', company: 'SemiAnalysis' },
-  { id: 'KARPATHY', name: 'Andrej Karpathy', type: 'research', company: 'Eureka Labs' },
-  { id: 'MARKS', name: 'Howard Marks', type: 'research', company: 'Oaktree Capital' },
-  { id: 'RUBIN', name: 'Rick Rubin', type: 'research', company: 'Shangri-La / Def Jam' },
-  { id: 'CHIEF', name: 'Chief', type: 'chief', company: 'TEV Agents' },
-  { id: 'DEPUTY', name: 'Deputy', type: 'tension', company: 'TEV Agents' }
+  { id: 'MVP', name: 'Manny V. Pangilinan', type: 'research', company: 'Metro Pacific / PLDT / Meralco' },
+  { id: 'RSA', name: 'Ramon S. Ang', type: 'research', company: 'San Miguel Corporation' },
+  { id: 'JAZA', name: 'Jaime Augusto Zobel de Ayala', type: 'research', company: 'Ayala Corporation' },
+  { id: 'EKR', name: 'Enrique K. Razon Jr.', type: 'research', company: 'ICTSI / Bloomberry / Prime Infra' },
+  { id: 'NVT', name: 'Nestor V. Tan', type: 'research', company: 'BDO Unibank' },
+  { id: 'CHIEF', name: 'CHIEF', type: 'chief', company: 'TEV Board PH' },
+  { id: 'TENSION', name: 'TENSION', type: 'tension', company: 'TEV Board PH' }
 ];
 
 const RESEARCH_IDS = AGENTS.filter((a) => a.type === 'research').map((a) => a.id);
