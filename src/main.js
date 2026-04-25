@@ -1389,7 +1389,9 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
       const modelState = buildModelStateContext(agentId);
       context.push(modelState || buildNoModelStateNote(agentId));
       const systemPrompt = buildSystemPrompt(agent, [...warRoomDocs, ...(agent.documents || [])], NORMAL_DOC_TOTAL_CHARS, provider.model, provider.mode, newsItems, {}, true, context.join('\n\n'));
-      const payload = { model: provider.model, messages: [{ role: 'system', content: systemPrompt }, ...clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS)] };
+      const languageLock = `\n\nIMPORTANT: Your working language is ${agent.workingLanguage}. Respond in ${agent.workingLanguage} regardless of what language other agents in this War Room transcript used. Do not mirror or switch to another language because of the surrounding context. If you naturally code-switch (e.g., Taglish), keep that pattern bounded - your dominant language remains ${agent.workingLanguage}.`;
+      const systemPromptWithLanguageLock = systemPrompt + languageLock;
+      const payload = { model: provider.model, messages: [{ role: 'system', content: systemPromptWithLanguageLock }, ...clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS)] };
 
       if (provider.mode === 'ollama') {
         const response = await fetch(`${provider.endpoint.replace(/\/$/, '')}/api/chat`, {
@@ -1400,14 +1402,14 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
         const result = await pipeOllamaStream(response.body, sender, { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' }, { agentId });
         researchOutputs.push({ agentId, text: result.text || '' });
       } else if (provider.mode === 'anthropic') {
-        const result = await callAnthropic(systemPrompt, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
+        const result = await callAnthropic(systemPromptWithLanguageLock, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
         });
         researchOutputs.push({ agentId, text: result.text || '' });
       } else if (provider.mode === 'openai') {
-        const result = await callOpenAI(systemPrompt, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
+        const result = await callOpenAI(systemPromptWithLanguageLock, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
@@ -1435,10 +1437,12 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
         true,
         `Research transcript:\n${synthesisPrompt}\n\nMake the call from your own role.`
       );
+      const languageLock = `\n\nIMPORTANT: Your working language is ${agent.workingLanguage}. Respond in ${agent.workingLanguage} regardless of what language other agents in this War Room transcript used. Do not mirror or switch to another language because of the surrounding context. If you naturally code-switch (e.g., Taglish), keep that pattern bounded - your dominant language remains ${agent.workingLanguage}.`;
+      const systemPromptWithLanguageLock = systemPrompt + languageLock;
       const payload = {
         model: provider.model,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: systemPromptWithLanguageLock },
           { role: 'user', content: question }
         ]
       };
@@ -1451,13 +1455,13 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
         });
         await pipeOllamaStream(response.body, sender, { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' }, { agentId });
       } else if (provider.mode === 'anthropic') {
-        await callAnthropic(systemPrompt, [{ role: 'user', content: question }], provider.model, provider.apiKey, true, {
+        await callAnthropic(systemPromptWithLanguageLock, [{ role: 'user', content: question }], provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
         });
       } else if (provider.mode === 'openai') {
-        await callOpenAI(systemPrompt, [{ role: 'user', content: question }], provider.model, provider.apiKey, true, {
+        await callOpenAI(systemPromptWithLanguageLock, [{ role: 'user', content: question }], provider.model, provider.apiKey, true, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
