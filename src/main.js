@@ -17,6 +17,9 @@ const store = new Store({
       groqCustomModel: '',
       geminiApiKey: '',
       geminiModel: 'gemini-2.0-flash',
+      xiaomiApiKey: '',
+      xiaomiModel: 'mimo-v2.5-pro',
+      xiaomiCustomModel: '',
       openrouterApiKey: '',
       openrouterModel: 'qwen/qwen3-4b:free',
       openrouterCustomModel: '',
@@ -57,8 +60,10 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const XIAOMI_URL = 'https://api.xiaomimimo.com/v1/chat/completions';
 const GROQ_MODEL_FALLBACKS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 const OPENROUTER_MAX_TOKENS = 4096;
+const XIAOMI_MAX_TOKENS = 4096;
 
 const MASTER_RESPONSE_SCAFFOLD = `GLOBAL RESPONSE RULES:
 - Keep answers short and direct.
@@ -297,7 +302,7 @@ function buildModelStateContext(agentId = '') {
 
 function buildSystemPrompt(agent, documents = [], docTotalCharBudget = NORMAL_DOC_TOTAL_CHARS, model = '', mode = '', newsItems = [], _priceData = {}, isWarRoom = false, extraContext = '') {
   const scaffold = getScaffold(agent.type, agent.id);
-  const viaMap = { ollama: 'via Ollama on the user\'s local machine', groq: 'via Groq', openrouter: 'via OpenRouter', gemini: 'via Google Gemini' };
+  const viaMap = { ollama: 'via Ollama on the user\'s local machine', groq: 'via Groq', xiaomi: 'via Xiaomi MiMo', openrouter: 'via OpenRouter', gemini: 'via Google Gemini' };
   const modelNote = model ? `\n\nYou are running as ${model} ${viaMap[mode] || ''}.` : '';
   const timeNote = buildCurrentTimeNote();
   const warRoomNote = isWarRoom
@@ -581,7 +586,9 @@ function parseFakeSearchWebCall(text = '') {
 function getProviderConfig(settings) {
   const mode = settings.mode || 'groq';
   if (mode === 'openllms') {
-    const activeProvider = settings.activeOpenLLMProvider === 'openrouter' ? 'openrouter' : 'groq';
+    const activeProvider = ['groq', 'xiaomi', 'openrouter'].includes(settings.activeOpenLLMProvider)
+      ? settings.activeOpenLLMProvider
+      : 'groq';
     return getProviderConfig({ ...settings, mode: activeProvider });
   }
   if (mode === 'frontier') {
@@ -604,6 +611,15 @@ function getProviderConfig(settings) {
     };
   }
   if (mode === 'gemini') return { mode, endpoint: GEMINI_URL, apiKey: settings.geminiApiKey, model: settings.geminiModel, extraHeaders: {} };
+  if (mode === 'xiaomi') {
+    return {
+      mode,
+      endpoint: XIAOMI_URL,
+      apiKey: settings.xiaomiApiKey,
+      model: resolveConfiguredModel('xiaomiModel', 'xiaomiCustomModel', 'mimo-v2.5-pro'),
+      extraHeaders: {}
+    };
+  }
   if (mode === 'openrouter') {
     return {
       mode,
@@ -778,6 +794,91 @@ async function callOpenAI(systemPrompt, messages, model, apiKey, stream = false,
   if (!stream) {
     const data = await response.json();
     return getOpenAITextContent(data?.choices?.[0]?.message?.content);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') {
+          if (sender && !sender.isDestroyed()) sender.send(events.done, { ...meta, text: fullText });
+          return { ok: true, text: fullText };
+        }
+        try {
+          const chunk = JSON.parse(data)?.choices?.[0]?.delta?.content;
+          const textChunk = Array.isArray(chunk) ? getOpenAITextContent(chunk) : String(chunk || '');
+          if (textChunk) {
+            fullText += textChunk;
+            if (sender && !sender.isDestroyed()) sender.send(events.chunk, { ...meta, chunk: textChunk });
+          }
+        } catch (_) {}
+      }
+    }
+    if (sender && !sender.isDestroyed()) sender.send(events.done, { ...meta, text: fullText });
+    return { ok: true, text: fullText };
+  } catch (err) {
+    if (sender && !sender.isDestroyed()) sender.send(events.error, { ...meta, error: err.message });
+    return { ok: false, error: err.message, text: fullText };
+  }
+}
+
+async function callXiaomi(systemPrompt, messages, model, apiKey, options = {}) {
+  const { signal } = options;
+  const response = await fetch(XIAOMI_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${String(apiKey || '').trim()}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: XIAOMI_MAX_TOKENS,
+      messages: buildOpenAIMessages(systemPrompt, messages)
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Xiaomi API error ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return getOpenAITextContent(data?.choices?.[0]?.message?.content);
+}
+
+async function callXiaomiStream(systemPrompt, messages, model, apiKey, options = {}) {
+  const { sender, events = { chunk: 'agent:stream-chunk', done: 'agent:stream-done', error: 'agent:stream-error' }, meta = {}, signal } = options;
+  const response = await fetch(XIAOMI_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${String(apiKey || '').trim()}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: XIAOMI_MAX_TOKENS,
+      messages: buildOpenAIMessages(systemPrompt, messages),
+      stream: true
+    }),
+    signal
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Xiaomi API error ${response.status}: ${errorText}`);
   }
 
   const reader = response.body.getReader();
@@ -1303,6 +1404,8 @@ ipcMain.handle('agent:send-message', async (_, { agentId, messages = [], newsIte
 
     if (provider.mode === 'anthropic') {
       responseText = await callAnthropic(primary.systemPrompt, primary.chatMessages, provider.model, provider.apiKey, false);
+    } else if (provider.mode === 'xiaomi') {
+      responseText = await callXiaomi(primary.systemPrompt, primary.chatMessages, provider.model, provider.apiKey);
     } else if (provider.mode === 'openai') {
       responseText = await callOpenAI(primary.systemPrompt, primary.chatMessages, provider.model, provider.apiKey, false);
     } else {
@@ -1341,6 +1444,12 @@ ipcMain.on('agent:start-stream', async (event, { agentId, messages = [], newsIte
       const result = await callAnthropic(promptBundle.systemPrompt, promptBundle.chatMessages, provider.model, provider.apiKey, true, { sender });
       if (result.ok) return;
       throw new Error(result.error || 'Anthropic streaming failed.');
+    }
+
+    if (provider.mode === 'xiaomi') {
+      const result = await callXiaomiStream(promptBundle.systemPrompt, promptBundle.chatMessages, provider.model, provider.apiKey, { sender });
+      if (result.ok) return;
+      throw new Error(result.error || 'Xiaomi streaming failed.');
     }
 
     if (provider.mode === 'openai') {
@@ -1412,6 +1521,13 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
           meta: { agentId }
         });
         researchOutputs.push({ agentId, text: result.text || '' });
+      } else if (provider.mode === 'xiaomi') {
+        const result = await callXiaomiStream(systemPromptWithLanguageLock, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, {
+          sender,
+          events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
+          meta: { agentId }
+        });
+        researchOutputs.push({ agentId, text: result.text || '' });
       } else if (provider.mode === 'openai') {
         const result = await callOpenAI(systemPromptWithLanguageLock, clipMessagesForBudget(lastMsgs, NORMAL_CHAT_CHARS), provider.model, provider.apiKey, true, {
           sender,
@@ -1460,6 +1576,12 @@ ipcMain.on('warroom:ask-all', async (event, { question }) => {
         await pipeOllamaStream(response.body, sender, { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' }, { agentId });
       } else if (provider.mode === 'anthropic') {
         await callAnthropic(systemPromptWithLanguageLock, [{ role: 'user', content: question }], provider.model, provider.apiKey, true, {
+          sender,
+          events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
+          meta: { agentId }
+        });
+      } else if (provider.mode === 'xiaomi') {
+        await callXiaomiStream(systemPromptWithLanguageLock, [{ role: 'user', content: question }], provider.model, provider.apiKey, {
           sender,
           events: { chunk: 'askall:agent-chunk', done: 'askall:agent-done', error: 'askall:agent-error' },
           meta: { agentId }
